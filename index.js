@@ -8,11 +8,12 @@ module.exports = (window) => {
 
   const parseSvgToDataURI = (svg) => {
     svg = svg.replace(/data-(.*?=(['"]).*?\2)/g, '$1');
+    svg = svg.replace(/xlink-href=/g, 'xlink:href=');
     svg = svg.replace(/view-box=/g, 'viewBox=');
-    svg = svg.replace(/(id|style|xmlns)=(['"]).*?\2/g, '');
+    svg = svg.replace(/<(title|desc|defs)>[\s\S]*?<\/\1>/g, '');
+    if (!/xmlns=/.test(svg)) svg = svg.replace(/<svg/, "<svg xmlns='http://www.w3.org/2000/svg'");
+
     svg = svg.replace(/\d+\.\d+/g, (match) => parseFloat(parseFloat(match).toFixed(2)));
-    svg = svg.replace(/<(title|desc)>[\s\S]*?<\/\1>/g, '');
-    svg = svg.replace(/<svg/, "<svg xmlns='http://www.w3.org/2000/svg'")
     svg = svg.replace(/<!--[\s\S]*?-->/g, '');
     svg = svg.replace(/\s+/g, " ");
     svg = svg.replace(/[{}\|\\\^~\[\]`"<>#%]/g, function (match) {
@@ -26,8 +27,6 @@ module.exports = (window) => {
   const resolveSymbol = (el) => {
     const symbolId = el.id;
     el.id = null;
-    el.style.display = 'none';
-
     const symbol = el;
 
     if (symbolMap[symbolId] !== symbol) {
@@ -36,17 +35,20 @@ module.exports = (window) => {
     }
 
     console.log('[kbone-svg] 保存 Symbol 完成', symbol);
+    return symbolId;
   }
 
   const renderSvg = (el) => {
     if (el.style.backgroundImage) return;
 
-    el.querySelectorAll('symbol').forEach(resolveSymbol);
+    const localSymbols = new Set(el.querySelectorAll('symbol').map(resolveSymbol));
 
     let isFullRendered = true;
 
     el.querySelectorAll('use').forEach(use => {
       const symbolId = (use.getAttribute('xlink:href') || use.getAttribute('data-xlink-href')).replace(/^#/, '');
+      if (localSymbols.has(symbolId)) return;
+
       const symbol = symbolMap[symbolId];
 
       if (symbol) {
@@ -64,7 +66,10 @@ module.exports = (window) => {
     });
 
     if (!isFullRendered) return;
-    
+
+    el.querySelectorAll('title').forEach((child) => el.removeChild(child));
+    el.querySelectorAll('desc').forEach((child) => el.removeChild(child));
+
     let svg = el.outerHTML;
 
     const svgDataURI = parseSvgToDataURI(svg);
@@ -88,7 +93,7 @@ module.exports = (window) => {
 
   window.$$addAspect('document.$$createElement.after', (el) => {
     if (el.tagName.toLowerCase() === 'svg') {
-      setTimeout(() => renderSvg(el), 0);
+      setTimeout(() => renderSvg.call(null, el, 'init'), 0);
     }
   });
 
