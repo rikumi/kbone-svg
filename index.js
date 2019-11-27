@@ -4,23 +4,21 @@
  */
 module.exports = (window) => {
   const symbolMap = {};
-
-  const symbolListeners = {};
+  const symbolUseMap = {};
 
   const parseSvgToDataURI = (svg) => {
-    svg = svg.replace(/(<\/?)symbol/g, '$1svg');
     svg = svg.replace(/data-(.*?=(['"]).*?\2)/g, '$1');
     svg = svg.replace(/view-box=/g, 'viewBox=');
     svg = svg.replace(/(id|style|xmlns)=(['"]).*?\2/g, '');
     svg = svg.replace(/\d+\.\d+/g, (match) => parseFloat(parseFloat(match).toFixed(2)));
     svg = svg.replace(/<(title|desc)>[\s\S]*?<\/\1>/g, '');
     svg = svg.replace(/<svg/, "<svg xmlns='http://www.w3.org/2000/svg'")
-    svg = svg.replace(/"/g, "'");
     svg = svg.replace(/<!--[\s\S]*?-->/g, '');
     svg = svg.replace(/\s+/g, " ");
     svg = svg.replace(/[{}\|\\\^~\[\]`"<>#%]/g, function (match) {
       return '%' + match[0].charCodeAt(0).toString(16).toUpperCase();
     });
+    svg = svg.replace(/'/g, "\\'");
 
     return 'data:image/svg+xml,' + svg.trim();
   }
@@ -30,49 +28,64 @@ module.exports = (window) => {
     el.id = null;
     el.style.display = 'none';
 
-    const symbol = el.outerHTML;
+    const symbol = el;
 
-    symbolMap[symbolId] = parseSvgToDataURI(symbol);
-    setTimeout(() => (symbolListeners[symbolId] || []).forEach(fn => fn()), 0);
+    if (symbolMap[symbolId] !== symbol) {
+      symbolMap[symbolId] = symbol;
+      setTimeout(() => symbolUseMap[symbolId] && symbolUseMap[symbolId].forEach(renderSvg), 0);
+    }
 
-    console.log('[小程序 SVG polyfill] 解析 Symbol 完成', { svg: symbol, data: symbolMap[symbolId] });
+    console.log('[kbone-svg] 保存 Symbol 完成', symbol);
   }
 
   const renderSvg = (el) => {
-    el.querySelectorAll('defs').forEach(def => {
-      def.querySelectorAll('symbol').forEach(resolveSymbol);
-      el.removeChild(def);
+    if (el.style.backgroundImage) return;
+
+    el.querySelectorAll('symbol').forEach(resolveSymbol);
+
+    let isFullRendered = true;
+
+    el.querySelectorAll('use').forEach(use => {
+      const symbolId = (use.getAttribute('xlink:href') || use.getAttribute('data-xlink-href')).replace(/^#/, '');
+      const symbol = symbolMap[symbolId];
+
+      if (symbol) {
+        const parentNode = use.parentNode;
+        parentNode.innerHTML = symbol.innerHTML;
+        parentNode.setAttribute('viewBox', symbol.getAttribute('viewBox'));
+
+        if (!symbolUseMap[symbolId]) symbolUseMap[symbolId] = new Set();
+        symbolUseMap[symbolId].delete(el);
+      } else {
+        if (!symbolUseMap[symbolId]) symbolUseMap[symbolId] = new Set();
+        symbolUseMap[symbolId].add(el);
+        isFullRendered = false;
+      }
     });
 
+    if (!isFullRendered) return;
+    
+    el.querySelectorAll('title').forEach((child) => el.removeChild(child));
+    el.querySelectorAll('desc').forEach((child) => el.removeChild(child));
     let svg = el.outerHTML;
 
-    const symbolId = (/data-xlink-href="#(.*?)"/.exec(svg) || [])[1];
-
-    let svgDataURI;
-
-    if (symbolId) {
-      svgDataURI = symbolMap[symbolId];
-
-      symbolListeners[symbolId] = (symbolListeners[symbolId] || []).concat(() => {
-        renderSvg(el, 'symbolUpdate');
-      });
-    } else {
-      svgDataURI = parseSvgToDataURI(svg);
-    }
-
-    if (!svgDataURI) return;
-
-    const backgroundImage = `url("${svgDataURI}")`;
+    const svgDataURI = parseSvgToDataURI(svg);
+    const backgroundImage = `url('${svgDataURI}')`;
 
     if (backgroundImage.length > 5000) {
-      console.error('[小程序 SVG polyfill] SVG 长度超限', { svg, data: svgDataURI });
+      console.error('[kbone-svg] SVG 长度超限', { svg, data: svgDataURI });
     }
+
+    el.innerHTML = '';
+
+    if (el.getAttribute('width')) el.style.width = el.getAttribute('width') + 'px';
+    if (el.getAttribute('height')) el.style.height = el.getAttribute('height') + 'px';
 
     el.style.backgroundImage = backgroundImage;
     el.style.backgroundPosition = 'center';
     el.style.backgroundRepeat = 'no-repeat';
 
-    console.log('[小程序 SVG polyfill] 渲染 SVG 元素完成', { svg, data: svgDataURI });
+    console.log('[kbone-svg] 渲染 SVG 元素完成', { svg, data: svgDataURI });
   }
 
   window.$$addAspect('document.$$createElement.after', (el) => {
