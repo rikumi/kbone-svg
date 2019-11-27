@@ -90,7 +90,7 @@ module.exports = (window) => {
 
   window.$$addAspect('document.$$createElement.after', (el) => {
     if (el.tagName.toLowerCase() === 'svg') {
-      setTimeout(() => renderSvg.call(null, el, 'init'), 0);
+      setTimeout(() => renderSvg(el), 0);
     }
   });
 
