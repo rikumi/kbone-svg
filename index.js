@@ -67,11 +67,7 @@ module.exports = (window) => {
 
     if (!isFullRendered) return;
 
-    el.querySelectorAll('title').forEach((child) => el.removeChild(child));
-    el.querySelectorAll('desc').forEach((child) => el.removeChild(child));
-
     let svg = el.outerHTML;
-
     const svgDataURI = parseSvgToDataURI(svg);
     const backgroundImage = `url('${svgDataURI}')`;
 
@@ -93,7 +89,7 @@ module.exports = (window) => {
 
   window.$$addAspect('document.$$createElement.after', (el) => {
     if (el.tagName.toLowerCase() === 'svg') {
-      setTimeout(() => renderSvg.call(null, el, 'init'), 0);
+      setTimeout(() => renderSvg(el), 0);
     }
   });
 
