@@ -65,8 +65,6 @@ module.exports = (window) => {
 
     if (!isFullRendered) return;
     
-    el.querySelectorAll('title').forEach((child) => el.removeChild(child));
-    el.querySelectorAll('desc').forEach((child) => el.removeChild(child));
     let svg = el.outerHTML;
 
     const svgDataURI = parseSvgToDataURI(svg);
